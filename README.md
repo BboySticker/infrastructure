@@ -1,6 +1,9 @@
 # Infrastructure as Code
 
 ## Create Stack
+
+##### Serval parameters need to be passed in by command line
+
 ```
 aws cloudformation create-stack \
     --stack-name REDACTED \
