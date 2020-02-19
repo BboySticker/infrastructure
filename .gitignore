@@ -1,0 +1,22 @@
+networking-copy.yaml
+
+*.json
+
+# Not include sensitive infomation
+var.json
+vars.json
+
+# File-based project format
+*.iws
+
+# Log file
+*.log
+
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+.DS_Store
