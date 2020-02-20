@@ -2,7 +2,7 @@
 
 ## Create Stack
 
-##### Serval parameters need to be passed in by command line
+#### Serval parameters need to be passed in by command line
 
 ```
 aws cloudformation create-stack \
@@ -12,8 +12,7 @@ aws cloudformation create-stack \
     --parameters ParameterKey=Region,ParameterValue=REDACTED_KEYVALUE \
     --parameters ParameterKey=PublicSubnet1CIDR,ParameterValue=REDACTED_KEYVALUE \
     --parameters ParameterKey=PublicSubnet2CIDR,ParameterValue=REDACTED_KEYVALUE \
-    --parameters ParameterKey=PrivateSubnet1CIDR,ParameterValue=REDACTED_KEYVALUE \
-    --parameters ParameterKey=PrivateSubnet2CIDR,ParameterValue=REDACTED_KEYVALUE \
+    --parameters ParameterKey=PublicSubnet3CIDR,ParameterValue=REDACTED_KEYVALUE \
     --template-body file://REDACTED \
     --profile REDACTED
 ```
