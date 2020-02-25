@@ -1,0 +1,320 @@
+
+Description:  This template deploys a VPC, with a pair of public and private subnets spread
+  across two Availability Zones. It deploys an internet gateway, with a default
+  route on the public subnets. It deploys a pair of NAT gateways (one in each AZ),
+  and default routes for them in the private subnets.
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that is prefixed to resource names
+    Type: String
+
+  VpcCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+
+  Region:
+    Description: Please enter the region that you want to use
+    Type: String
+
+  SubnetCIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+  
+  EC2InstanceType:
+    Description: Please enter the instance type for the EC2 instance that you want to create
+    Type: String
+    AllowedValues: ["t2.micro", "m1.small"]
+
+  EC2InstanceVolumeSize:
+    Description: Please enter the instance volume size for the EC2 instance that you want to create
+    Type: String
+  
+  DBInstanceType:
+    Description: Please enter the instance type for the database instance that you want to create
+    Type: String
+    Default: db.t3.micro
+
+  DBInstanceVolumeSize:
+    Description: Please enter the instance volume size for the RDS instance that you want to create
+    Type: String
+  
+  DBUsername:
+    Description: Please enter the master username for the database instance that you want to create
+    Type: String
+  
+  DBPassword:
+    Description: Please enter the master password for the database instance that you want to create
+    Type: String
+  
+  AMIID:
+    Description: Please enter the AMI Id for the EC2 instance that you want to create
+    Type: String
+
+Resources:
+  Role:
+    Type: AWS::IAM::Role
+    Properties: 
+      RoleName: EC2-CSYE6225
+      AssumeRolePolicyDocument: 
+        Version: 2012-10-17
+        Statement: 
+          - Effect: Allow
+            Principal: 
+              Service: 
+                - ec2.amazonaws.com
+                - s3.amazonaws.com
+            Action: 
+              - sts:AssumeRole
+      Path: "/"
+      Tags:
+        - Key: Name
+          Value: EC2-CSYE6225
+
+  RolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: WebAppS3
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: 
+              - s3:GetObject
+              - s3:PutObject
+              - s3:PutObjectAcl
+            Resource: arn:aws:s3:::${EncryptedS3Bucket}/*
+      Roles: 
+        - !Ref Role
+
+  EC2InstanceProfile: 
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      Path: "/"
+      Roles: 
+        - !Ref Role
+
+  AppServersSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access via port 22/80/433/8080
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 22
+          ToPort: 22
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 80
+          ToPort: 80  
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 433
+          ToPort: 433
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 8080
+          ToPort: 8080
+      Tags:
+        - Key: Name
+          Value: application
+
+  # DBBaseSecurityGroup:
+  #   Type: AWS::EC2::SecurityGroup
+  #   Properties:
+  #     GroupDescription: Base security group for DB instances
+  #     GroupName: database
+  #     VpcId: !Ref VPC
+  #     SecurityGroupIngress:
+  #       - IpProtocol: tcp
+  #         CidrIp: 0.0.0.0/0
+  #         FromPort: 3306
+  #         ToPort: 3306
+  #         SourceSecurityGroupId: !Ref AppServersSecurityGroup
+
+  DBServersSecurityGroup:
+    Type: AWS::RDS::DBSecurityGroup
+    Properties:
+      GroupDescription: RDS DB security group for all the RDS instances that will host web application
+      EC2VpcId: !Ref VPC
+      DBSecurityGroupIngress:
+        - EC2SecurityGroupId: !Ref AppServersSecurityGroup
+      Tags:
+        - Key: Name
+          Value: database
+
+  EncryptedS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+        - Id: Standard_IA
+          Prefix: standard_ia
+          Status: Enabled
+          ExpirationInDays: '365'
+          Transitions:
+            - TransitionInDays: '30'
+              StorageClass: STANDARD_IA
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AMIID
+      InstanceType: !Ref EC2InstanceType
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds: 
+        - !Ref AppServersSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sdm
+          Ebs: 
+            VolumeType: gp2
+            VolumeSize: !Ref EC2InstanceVolumeSize
+            DeleteOnTermination: false
+      KeyName: KeyForSpringBoot
+      SubnetId: !Ref DBSubnet1
+      DependSOn: DBInstance
+      # UserData: 
+
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: csye6225
+      Engine: MySQL
+      DBInstanceClass: !Ref DBInstanceType
+      MultiAZ: false
+      DBInstanceIdentifier: csye6225-spring2020
+      AllocatedStorage: !Ref DBInstanceVolumeSize
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      PubliclyAccessible: false
+      DBSecurityGroups: 
+        - !Ref DBServersSecurityGroup
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties: 
+      DBSubnetGroupDescription: The DBSubnetGroup for DB subnet
+      DBSubnetGroupName: myDBSubnetGroup
+      SubnetIds: 
+        - !Ref DBSubnet1
+        - !Ref DBSubnet2
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref EnvironmentName
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref EnvironmentName
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  DBSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: 
+        Fn::Select: 
+            - 0
+            - Fn::GetAZs: !Sub
+                - ${Domain}
+                - { Domain: !Ref Region }
+      CidrBlock: !Ref SubnetCIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public DB Subnet (AZ1)
+
+  DBSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: 
+        Fn::Select: 
+            - 1
+            - Fn::GetAZs: !Sub
+                - ${Domain}
+                - { Domain: !Ref Region }
+      CidrBlock: 10.192.11.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public DB Subnet (AZ2)
+
+
+  DBPublicRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Routes
+
+  DBPublicRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref DBPublicRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  DBSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DBPublicRouteTable1
+      SubnetId: !Ref DBSubnet1
+
+  DBPublicRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Routes
+
+  DBPublicRoute2:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref DBPublicRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  DBSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DBPublicRouteTable2
+      SubnetId: !Ref DBSubnet2
+
+Outputs:
+  VPC:
+    Description: A reference to the created VPC
+    Value: !Ref VPC
+
+  DBSubnet1:
+    Description: A reference to the public subnet in the 1st Availability Zone
+    Value: !Ref DBSubnet1
+  
+  DBSubnet2:
+    Description: A reference to the public subnet in the 1st Availability Zone
+    Value: !Ref DBSubnet2
