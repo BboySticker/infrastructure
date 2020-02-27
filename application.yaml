@@ -51,11 +51,15 @@ Parameters:
     Description: Please enter the AMI Id for the EC2 instance that you want to create
     Type: String
 
+  RoleName:
+    Description: Please enter the Role Name that you want to create
+    Type: String
+
 Resources:
   Role:
     Type: AWS::IAM::Role
     Properties: 
-      RoleName: EC2-CSYE6225
+      RoleName: !Ref RoleName
       AssumeRolePolicyDocument: 
         Version: 2012-10-17
         Statement: 
@@ -69,12 +73,12 @@ Resources:
       Path: "/"
       Tags:
         - Key: Name
-          Value: EC2-CSYE6225
+          Value: !Ref RoleName
 
   RolePolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: WebAppS3
+      PolicyName: WebAppS3-1
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -82,8 +86,9 @@ Resources:
             Action: 
               - s3:GetObject
               - s3:PutObject
-              - s3:PutObjectAcl
-            Resource: arn:aws:s3:::${EncryptedS3Bucket}/*
+              - s3:DeleteObject
+              - s3:ListBucket
+            Resource: [!Sub "arn:aws:s3:::${EncryptedS3Bucket}", !Sub "arn:aws:s3:::${EncryptedS3Bucket}/*"]
       Roles: 
         - !Ref Role
 
@@ -118,20 +123,7 @@ Resources:
           ToPort: 8080
       Tags:
         - Key: Name
-          Value: application
-
-  # DBBaseSecurityGroup:
-  #   Type: AWS::EC2::SecurityGroup
-  #   Properties:
-  #     GroupDescription: Base security group for DB instances
-  #     GroupName: database
-  #     VpcId: !Ref VPC
-  #     SecurityGroupIngress:
-  #       - IpProtocol: tcp
-  #         CidrIp: 0.0.0.0/0
-  #         FromPort: 3306
-  #         ToPort: 3306
-  #         SourceSecurityGroupId: !Ref AppServersSecurityGroup
+          Value: application-1
 
   DBServersSecurityGroup:
     Type: AWS::RDS::DBSecurityGroup
@@ -142,7 +134,7 @@ Resources:
         - EC2SecurityGroupId: !Ref AppServersSecurityGroup
       Tags:
         - Key: Name
-          Value: database
+          Value: database-1
 
   EncryptedS3Bucket:
     Type: AWS::S3::Bucket
@@ -154,16 +146,17 @@ Resources:
               SSEAlgorithm: AES256
       LifecycleConfiguration:
         Rules:
-        - Id: Standard_IA
-          Prefix: standard_ia
+        - Id: TransferToStandardIAIn30Days-1
+          Prefix: “”
           Status: Enabled
-          ExpirationInDays: '365'
+          ExpirationInDays: 365
           Transitions:
-            - TransitionInDays: '30'
+            - TransitionInDays: 30
               StorageClass: STANDARD_IA
 
   EC2Instance:
     Type: AWS::EC2::Instance
+    DependsOn: DBInstance
     Properties:
       ImageId: !Ref AMIID
       InstanceType: !Ref EC2InstanceType
@@ -178,17 +171,35 @@ Resources:
             DeleteOnTermination: false
       KeyName: KeyForSpringBoot
       SubnetId: !Ref DBSubnet1
-      DependSOn: DBInstance
-      # UserData: 
-
+      UserData: 
+        Fn::Base64: 
+          Fn::Join: [
+            "",
+            [
+              "#!/bin/bash -v \n",
+              "set -e -x \n",
+              "sudo apt-get update \n",
+              "echo export PROFILE_NAME=AWS >> /etc/profile \n",
+              "echo export RDS_MYSQL_DB_HOST=",!GetAtt DBInstance.Endpoint.Address," >> /etc/profile \n",
+              "echo export RDS_MYSQL_DB_PORT=",!GetAtt DBInstance.Endpoint.Port," >> /etc/profile \n",
+              "echo export RDS_MYSQL_DB_USERNAME=",!Ref DBUsername," >> /etc/profile \n",
+              "echo export RDS_MYSQL_DB_PASSWORD=",!Ref DBPassword," >> /etc/profile \n",
+              "echo export AWS_REGION=",!Ref Region," >> /etc/profile \n",
+              "echo export AWS_S3_BUCKET_NAME=",!Ref EncryptedS3Bucket," >> /etc/profile \n",
+              "echo export AWS_S3_BUCKET_URL=",!GetAtt EncryptedS3Bucket.WebsiteURL," >> /etc/profile \n",
+              "echo export AWS_S3_BUCKET_DOMAIN=",!GetAtt EncryptedS3Bucket.DomainName," >> /etc/profile \n"
+            ]
+          ]
+              
   DBInstance:
     Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
     Properties:
       DBName: csye6225
       Engine: MySQL
       DBInstanceClass: !Ref DBInstanceType
       MultiAZ: false
-      DBInstanceIdentifier: csye6225-spring2020
+      DBInstanceIdentifier: csye6225-spring2020-1
       AllocatedStorage: !Ref DBInstanceVolumeSize
       MasterUsername: !Ref DBUsername
       MasterUserPassword: !Ref DBPassword
@@ -201,7 +212,7 @@ Resources:
     Type: AWS::RDS::DBSubnetGroup
     Properties: 
       DBSubnetGroupDescription: The DBSubnetGroup for DB subnet
-      DBSubnetGroupName: myDBSubnetGroup
+      DBSubnetGroupName: myDBSubnetGroup-1
       SubnetIds: 
         - !Ref DBSubnet1
         - !Ref DBSubnet2
@@ -260,7 +271,6 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName} Public DB Subnet (AZ2)
-
 
   DBPublicRouteTable1:
     Type: AWS::EC2::RouteTable
