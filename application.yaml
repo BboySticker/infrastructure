@@ -144,17 +144,31 @@ Resources:
       Tags:
         - Key: Name
           Value: application
-
+ 
   DBServersSecurityGroup:
-    Type: AWS::RDS::DBSecurityGroup
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: RDS DB security group for all the RDS instances that will host web application
+      GroupDescription: EC2 security group for all the RDS instances that will host web application
       EC2VpcId: !Ref VPC
-      DBSecurityGroupIngress:
-        - EC2SecurityGroupId: !Ref AppServersSecurityGroup
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref AppServersSecurityGroup
+          FromPort: 3306
+          ToPort: 3306
       Tags:
         - Key: Name
           Value: database
+
+  # DBServersSecurityGroup:
+  #   Type: AWS::RDS::DBSecurityGroup
+  #   Properties:
+  #     GroupDescription: RDS DB security group for all the RDS instances that will host web application
+  #     EC2VpcId: !Ref VPC
+  #     DBSecurityGroupIngress:
+  #       - EC2SecurityGroupId: !Ref AppServersSecurityGroup
+  #     Tags:
+  #       - Key: Name
+  #         Value: database
 
   EncryptedS3Bucket:
     Type: AWS::S3::Bucket
