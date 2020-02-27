@@ -98,7 +98,7 @@ Resources:
   RolePolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: WebAppS3-1
+      PolicyName: WebAppS3
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -143,7 +143,7 @@ Resources:
           ToPort: 8080
       Tags:
         - Key: Name
-          Value: application-1
+          Value: application
 
   DBServersSecurityGroup:
     Type: AWS::RDS::DBSecurityGroup
@@ -154,7 +154,7 @@ Resources:
         - EC2SecurityGroupId: !Ref AppServersSecurityGroup
       Tags:
         - Key: Name
-          Value: database-1
+          Value: database
 
   EncryptedS3Bucket:
     Type: AWS::S3::Bucket
@@ -166,7 +166,7 @@ Resources:
               SSEAlgorithm: AES256
       LifecycleConfiguration:
         Rules:
-        - Id: TransferToStandardIAIn30Days-1
+        - Id: TransferToStandardIAIn30Days
           Prefix: “”
           Status: Enabled
           ExpirationInDays: 365
@@ -236,7 +236,7 @@ Resources:
     Type: AWS::RDS::DBSubnetGroup
     Properties: 
       DBSubnetGroupDescription: The DBSubnetGroup for DB subnet
-      DBSubnetGroupName: myDBSubnetGroup-1
+      DBSubnetGroupName: myDBSubnetGroup
       SubnetIds: 
         - !Ref DBSubnet1
         - !Ref DBSubnet2
