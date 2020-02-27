@@ -149,7 +149,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: EC2 security group for all the RDS instances that will host web application
-      EC2VpcId: !Ref VPC
+      VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           SourceSecurityGroupId: !Ref AppServersSecurityGroup
@@ -243,7 +243,7 @@ Resources:
       MasterUserPassword: !Ref DBPassword
       DBSubnetGroupName: !Ref DBSubnetGroup
       PubliclyAccessible: !Ref DBPublicAccessibility
-      DBSecurityGroups: 
+      SecurityGroups: 
         - !Ref DBServersSecurityGroup
 
   DBSubnetGroup:
