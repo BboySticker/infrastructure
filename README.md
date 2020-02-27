@@ -36,6 +36,7 @@ aws cloudformation create-stack \
         ParameterKey=DBUsername,ParameterValue=REDACTED_KEYVALUE \
         ParameterKey=DBPassword,ParameterValue=REDACTED_KEYVALUE \
         ParameterKey=AMIID,ParameterValue=REDACTED_KEYVALUE \
+        ParameterKey=RoleName,ParameterValue=REDACTED_KEYVALUE \
     --template-body file://REDACTED \
     --capabilities CAPABILITY_NAMED_IAM \
     --profile REDACTED
