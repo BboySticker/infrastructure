@@ -33,11 +33,17 @@ aws cloudformation create-stack \
         ParameterKey=EC2InstanceVolumeSize,ParameterValue=REDACTED_KEYVALUE \
         ParameterKey=DBInstanceType,ParameterValue=REDACTED_KEYVALUE \
         ParameterKey=DBInstanceVolumeSize,ParameterValue=REDACTED_KEYVALUE \
+        ParameterKey=DBEngine,ParameterValue=REDACTED_KEYVALUE \
+        ParameterKey=DBMultiAZ,ParameterValue=REDACTED_KEYVALUE \
+        ParameterKey=DBInstanceID,ParameterValue=REDACTED_KEYVALUE \
+        ParameterKey=DBPublicAccessibility,ParameterValue=REDACTED_KEYVALUE \
+        ParameterKey=DBName,ParameterValue=REDACTED_KEYVALUE \
         ParameterKey=DBUsername,ParameterValue=REDACTED_KEYVALUE \
         ParameterKey=DBPassword,ParameterValue=REDACTED_KEYVALUE \
         ParameterKey=AMIID,ParameterValue=REDACTED_KEYVALUE \
         ParameterKey=RoleName,ParameterValue=REDACTED_KEYVALUE \
     --template-body file://REDACTED \
+    --region REDACTED \
     --capabilities CAPABILITY_NAMED_IAM \
     --profile REDACTED
 ```

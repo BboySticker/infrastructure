@@ -39,6 +39,26 @@ Parameters:
     Description: Please enter the instance volume size for the RDS instance that you want to create
     Type: String
   
+  DBPublicAccessibility:
+    Description: Please enter the instance volume size for the RDS instance that you want to create
+    Type: String
+  
+  DBEngine:
+    Description: Please enter the database engine for the RDS instance that you want to create
+    Type: String
+
+  DBMultiAZ:
+    Description: Please enter the acailability of multi aws zone for RDS instance that you want to create
+    Type: String
+  
+  DBInstanceID:
+    Description: Please enter the DB instance indentifier of RDS instance that you want to create
+    Type: String
+  
+  DBName:
+    Description: Please enter the DB name of RDS instance that you want to create
+    Type: String
+  
   DBUsername:
     Description: Please enter the master username for the database instance that you want to create
     Type: String
@@ -78,7 +98,7 @@ Resources:
   RolePolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: WebAppS3
+      PolicyName: WebAppS3-1
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -123,7 +143,7 @@ Resources:
           ToPort: 8080
       Tags:
         - Key: Name
-          Value: application
+          Value: application-1
 
   DBServersSecurityGroup:
     Type: AWS::RDS::DBSecurityGroup
@@ -134,7 +154,7 @@ Resources:
         - EC2SecurityGroupId: !Ref AppServersSecurityGroup
       Tags:
         - Key: Name
-          Value: database
+          Value: database-1
 
   EncryptedS3Bucket:
     Type: AWS::S3::Bucket
@@ -146,7 +166,7 @@ Resources:
               SSEAlgorithm: AES256
       LifecycleConfiguration:
         Rules:
-        - Id: TransferToStandardIAIn30Days
+        - Id: TransferToStandardIAIn30Days-1
           Prefix: “”
           Status: Enabled
           ExpirationInDays: 365
@@ -164,11 +184,11 @@ Resources:
       SecurityGroupIds: 
         - !Ref AppServersSecurityGroup
       BlockDeviceMappings:
-        - DeviceName: /dev/sdm
+        - DeviceName: /dev/sda1
           Ebs: 
             VolumeType: gp2
             VolumeSize: !Ref EC2InstanceVolumeSize
-            DeleteOnTermination: false
+            DeleteOnTermination: true
       KeyName: KeyForSpringBoot
       SubnetId: !Ref DBSubnet1
       UserData: 
@@ -184,6 +204,7 @@ Resources:
               "echo PROFILE_NAME=AWS >> /env/properties \n",
               "echo RDS_MYSQL_DB_HOST=",!GetAtt DBInstance.Endpoint.Address," >> /env/properties \n",
               "echo RDS_MYSQL_DB_PORT=",!GetAtt DBInstance.Endpoint.Port," >> /env/properties \n",
+              "echo RDS_MYSQL_DB_NAME=",!Ref DBName," >> /env/properties \n",
               "echo RDS_MYSQL_DB_USERNAME=",!Ref DBUsername," >> /env/properties \n",
               "echo RDS_MYSQL_DB_PASSWORD=",!Ref DBPassword," >> /env/properties \n",
               "echo AWS_REGION=",!Ref Region," >> /env/properties \n",
@@ -198,16 +219,16 @@ Resources:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete
     Properties:
-      DBName: csye6225
-      Engine: MySQL
+      DBName: !Ref DBName
+      Engine: !Ref DBEngine
       DBInstanceClass: !Ref DBInstanceType
-      MultiAZ: false
-      DBInstanceIdentifier: csye6225-spring2020
+      MultiAZ: !Ref DBMultiAZ
+      DBInstanceIdentifier: !Ref DBInstanceID
       AllocatedStorage: !Ref DBInstanceVolumeSize
       MasterUsername: !Ref DBUsername
       MasterUserPassword: !Ref DBPassword
       DBSubnetGroupName: !Ref DBSubnetGroup
-      PubliclyAccessible: false
+      PubliclyAccessible: !Ref DBPublicAccessibility
       DBSecurityGroups: 
         - !Ref DBServersSecurityGroup
 
@@ -215,7 +236,7 @@ Resources:
     Type: AWS::RDS::DBSubnetGroup
     Properties: 
       DBSubnetGroupDescription: The DBSubnetGroup for DB subnet
-      DBSubnetGroupName: myDBSubnetGroup
+      DBSubnetGroupName: myDBSubnetGroup-1
       SubnetIds: 
         - !Ref DBSubnet1
         - !Ref DBSubnet2
