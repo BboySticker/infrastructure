@@ -1,4 +1,6 @@
-networking-copy.yaml
+cicd.yml
+
+*copy.yaml
 
 *.json
 
