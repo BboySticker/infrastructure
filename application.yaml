@@ -1,12 +1,9 @@
 
-Description:  This template deploys a VPC, with a pair of public and private subnets spread
-  across two Availability Zones. It deploys an internet gateway, with a default
-  route on the public subnets. It deploys a pair of NAT gateways (one in each AZ),
-  and default routes for them in the private subnets.
+Description:  Create a set of resources that support the web application to run.
 
 Parameters:
   EnvironmentName:
-    Description: An environment name that is prefixed to resource names
+    Description: Please enter the environment name that is prefixed to resource names
     Type: String
 
   VpcCIDR:
@@ -14,11 +11,11 @@ Parameters:
     Type: String
 
   Region:
-    Description: Please enter the region that you want to use
+    Description: Please enter the region in AWS that you want to use
     Type: String
 
   SubnetCIDR:
-    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Description: Please enter the IP range (CIDR notation) for the public subnet
     Type: String
   
   EC2InstanceType:
@@ -75,49 +72,244 @@ Parameters:
     Description: Please enter the Role Name that you want to create
     Type: String
 
-Resources:
-  Role:
-    Type: AWS::IAM::Role
-    Properties: 
-      RoleName: !Ref RoleName
-      AssumeRolePolicyDocument: 
-        Version: 2012-10-17
-        Statement: 
-          - Effect: Allow
-            Principal: 
-              Service: 
-                - ec2.amazonaws.com
-                - s3.amazonaws.com
-            Action: 
-              - sts:AssumeRole
-      Path: "/"
-      Tags:
-        - Key: Name
-          Value: !Ref RoleName
+  CodeDeployS3Bucket:
+    Description: Please enter the S3 Bucket Name that you want to use for store Application Archive
+    Type: String
+    Default: arn:aws:s3:::codedeploy.xinyuzhang.me
 
-  RolePolicy:
+Resources:
+  CodeDeployEC2S3:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: WebAppS3
+        PolicyName: CodeDeploy-EC2-S3
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action: 
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+                - s3:ListBucket
+              Resource: [!Sub "arn:aws:s3:::${EncryptedS3Bucket}", !Sub "arn:aws:s3:::${EncryptedS3Bucket}/*"]
+            - Effect: Allow
+              Action: 
+                - s3:GetObject
+                - s3:ListBucket
+              Resource: !Ref CodeDeployS3Bucket
+        Roles: 
+          - !Ref CodeDeployEC2ServiceRole
+
+  CircleCIUploadToS3:
+    Type: AWS::IAM::Policy
+    Properties:
+        PolicyName: CircleCI-Upload-To-S3
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action: 
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource: !Ref CodeDeployS3Bucket
+        Users: 
+          - circleci
+  
+  CircleCICodeDeploy:
+    Type: AWS::IAM::Policy
+    Properties:
+        PolicyName: CircleCI-Code-Deploy
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action: 
+                - codedeploy:RegisterApplicationRevision
+                - codedeploy:GetApplicationRevision
+              Resource: 
+                - Fn::Join: [
+                    "",
+                    [
+                      "arn:aws:codedeploy:",
+                      !Ref "AWS::Region",
+                      ":",
+                      !Ref "AWS::AccountId",
+                      ":application:",
+                      !Ref CodeDeployApplication
+                    ]
+                  ]
+            - Effect: Allow
+              Action: 
+                - codedeploy:CreateDeployment
+                - codedeploy:GetDeployment
+              Resource: "*"
+            - Effect: Allow
+              Action: 
+                - codedeploy:GetDeploymentConfig
+              Resource: 
+                - Fn::Join: [
+                    "", 
+                    [
+                      "arn:aws:codedeploy:", 
+                      !Ref "AWS::Region", 
+                      ":",
+                      !Ref "AWS::AccountId",
+                      ":deploymentconfig:CodeDeployDefault.OneAtATime"
+                    ]
+                  ]
+                - Fn::Join: [
+                    "",
+                    [
+                      "arn:aws:codedeploy:",
+                      !Ref "AWS::Region",
+                      ":",
+                      !Ref "AWS::AccountId",
+                      ":deploymentconfig:CodeDeployDefault.HalfAtATime"
+                    ]
+                  ]
+                - Fn::Join: [
+                    "",
+                    [
+                      "arn:aws:codedeploy:",
+                      !Ref "AWS::Region",
+                      ":",
+                      !Ref "AWS::AccountId",
+                      ":deploymentconfig:CodeDeployDefault.AllAtOnce"
+                    ]
+                  ]
+        Users: 
+          - circleci
+
+  CircleciEC2AMI:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: Circleci-EC2-AMI
       PolicyDocument:
         Version: 2012-10-17
         Statement:
           - Effect: Allow
-            Action: 
-              - s3:GetObject
-              - s3:PutObject
-              - s3:DeleteObject
-              - s3:ListBucket
-            Resource: [!Sub "arn:aws:s3:::${EncryptedS3Bucket}", !Sub "arn:aws:s3:::${EncryptedS3Bucket}/*"]
-      Roles: 
-        - !Ref Role
+            Action: [
+              "ec2:AttachVolume",
+              "ec2:AuthorizeSecurityGroupIngress",
+              "ec2:CopyImage",
+              "ec2:CreateImage",
+              "ec2:CreateKeypair",
+              "ec2:CreateSecurityGroup",
+              "ec2:CreateSnapshot",
+              "ec2:CreateTags",
+              "ec2:CreateVolume",
+              "ec2:DeleteKeyPair",
+              "ec2:DeleteSecurityGroup",
+              "ec2:DeleteSnapshot",
+              "ec2:DeleteVolume",
+              "ec2:DeregisterImage",
+              "ec2:DescribeImageAttribute",
+              "ec2:DescribeImages",
+              "ec2:DescribeInstances",
+              "ec2:DescribeInstanceStatus",
+              "ec2:DescribeRegions",
+              "ec2:DescribeSecurityGroups",
+              "ec2:DescribeSnapshots",
+              "ec2:DescribeSubnets",
+              "ec2:DescribeTags",
+              "ec2:DescribeVolumes",
+              "ec2:DetachVolume",
+              "ec2:GetPasswordData",
+              "ec2:ModifyImageAttribute",
+              "ec2:ModifyInstanceAttribute",
+              "ec2:ModifySnapshotAttribute",
+              "ec2:RegisterImage",
+              "ec2:RunInstances",
+              "ec2:StopInstances",
+              "ec2:TerminateInstances"
+            ]
+            Resource: "*"
+      Users: 
+        - circleci
+
+  CodeDeployEC2ServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CodeDeployEC2ServiceRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Tags:
+        - Key: Name
+          Value: CodeDeployEC2ServiceRole
+  
+  CodeDeployServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CodeDeployServiceRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codedeploy.amazonaws.com
+                # - application-autoscaling.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+      Tags:
+        - Key: Name
+          Value: CodeDeployServiceRole
+
+  CodeDeployApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties: 
+      ApplicationName: csye6225-webapp
+      ComputePlatform: Server
+
+  # CodeDeployDeploymentGroup:
+  #   DependsOn: EC2Instance
+  #   Type: AWS::CodeDeploy::DeploymentGroup
+  #   Properties:
+  #     ApplicationName: !Ref CodeDeployApplication
+  #     # AutoRollbackConfiguration:
+  #     #   Enabled: true
+  #     #   Events:
+  #     #     - DEPLOYMENT_FAILURE
+  #     Deployment:
+  #       Description: Deploy on EC2 Instances
+  #       IgnoreApplicationStopFailures: false
+  #       Revision:
+  #         RevisionType: S3
+  #         S3Location:
+  #           Bucket: !Ref CodeDeployS3Bucket
+  #           Key: csye6225-webapp-*
+  #           BundleType: zip
+  #     DeploymentGroupName: csye6225-webapp-deployment
+  #     DeploymentConfigName: CodeDeployDefault.AllAtOnce
+  #     DeploymentStyle:
+  #       DeploymentOption: WITHOUT_TRAFFIC_CONTROL
+  #       DeploymentType: IN_PLACE
+  #     Ec2TagFilters: 
+  #       - Key: Label
+  #         Value: codedeploy
+  #         Type: KEY_AND_VALUE
+  #     OnPremisesInstanceTagFilters:
+  #       - Key: Label
+  #         Value: codedeploy
+  #         Type: KEY_AND_VALUE
+  #     ServiceRoleArn: !GetAtt [CodeDeployServiceRole, Arn]
 
   EC2InstanceProfile: 
     Type: AWS::IAM::InstanceProfile
     Properties: 
       Path: "/"
       Roles: 
-        - !Ref Role
+        - !Ref CodeDeployEC2ServiceRole
 
   AppServersSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -158,17 +350,6 @@ Resources:
       Tags:
         - Key: Name
           Value: database
-
-  # DBServersSecurityGroup:
-  #   Type: AWS::RDS::DBSecurityGroup
-  #   Properties:
-  #     GroupDescription: RDS DB security group for all the RDS instances that will host web application
-  #     EC2VpcId: !Ref VPC
-  #     DBSecurityGroupIngress:
-  #       - EC2SecurityGroupId: !Ref AppServersSecurityGroup
-  #     Tags:
-  #       - Key: Name
-  #         Value: database
 
   EncryptedS3Bucket:
     Type: AWS::S3::Bucket
@@ -212,7 +393,8 @@ Resources:
             [
               "#!/bin/bash -v \n",
               "set -e -x \n",
-              "sudo apt-get update \n",
+              "sudo apt-get update -y \n",
+              "sudo apt-get upgrade -y \n",
               "sudo mkdir /env \n",
               "sudo touch /env/properties \n",
               "echo PROFILE_NAME=AWS >> /env/properties \n",
@@ -225,9 +407,13 @@ Resources:
               "echo AWS_S3_BUCKET_NAME=",!Ref EncryptedS3Bucket," >> /env/properties \n",
               "echo AWS_S3_BUCKET_URL=",!GetAtt EncryptedS3Bucket.WebsiteURL," >> /env/properties \n",
               "echo AWS_S3_BUCKET_DOMAIN=",!GetAtt EncryptedS3Bucket.DomainName," >> /env/properties \n",
-              "echo export $(grep -v '^#' /env/properties | xargs) >> /etc/profile"
+              "echo export $(grep -v '^#' /env/properties | xargs) >> /etc/profile \n",
+              "sudo service tomcat8 restart \n"
             ]
           ]
+      Tags:
+        - Key: Label
+          Value: codedeploy
               
   DBInstance:
     Type: AWS::RDS::DBInstance
@@ -243,7 +429,7 @@ Resources:
       MasterUserPassword: !Ref DBPassword
       DBSubnetGroupName: !Ref DBSubnetGroup
       PubliclyAccessible: !Ref DBPublicAccessibility
-      SecurityGroups: 
+      VPCSecurityGroups: 
         - !Ref DBServersSecurityGroup
 
   DBSubnetGroup:
