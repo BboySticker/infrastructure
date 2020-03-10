@@ -96,7 +96,7 @@ Resources:
               Action: 
                 - s3:GetObject
                 - s3:ListBucket
-              Resource: !Ref CodeDeployS3Bucket
+              Resource: [!Ref CodeDeployS3Bucket, "arn:aws:s3:::codepipeline-us-east-1-*"]
         Roles: 
           - !Ref CodeDeployEC2ServiceRole
 
@@ -112,7 +112,7 @@ Resources:
                 - s3:GetObject
                 - s3:PutObject
                 - s3:ListBucket
-              Resource: !Ref CodeDeployS3Bucket
+              Resource: [!Ref CodeDeployS3Bucket, !Join [!Ref CodeDeployS3Bucket, "/*"]]
         Users: 
           - circleci
   
