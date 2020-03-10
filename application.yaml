@@ -96,7 +96,16 @@ Resources:
               Action: 
                 - s3:GetObject
                 - s3:ListBucket
-              Resource: [!Ref CodeDeployS3Bucket, "arn:aws:s3:::codepipeline-us-east-1-*"]
+              Resource: [!Ref CodeDeployS3Bucket, !Join ["", [!Ref CodeDeployS3Bucket, "/*"]]]
+            - Effect: Allow
+              Action: 
+                - s3:GetObject
+                - s3:ListBucket
+              Resource: "*"
+            - Effect: Allow
+              Action: 
+                - kms:*
+              Resource: "*"
         Roles: 
           - !Ref CodeDeployEC2ServiceRole
 
@@ -112,7 +121,7 @@ Resources:
                 - s3:GetObject
                 - s3:PutObject
                 - s3:ListBucket
-              Resource: [!Ref CodeDeployS3Bucket, !Join [!Ref CodeDeployS3Bucket, "/*"]]
+              Resource: [!Ref CodeDeployS3Bucket, !Join ["", [!Ref CodeDeployS3Bucket, "/*"]]]
         Users: 
           - circleci
   
@@ -271,38 +280,38 @@ Resources:
       ApplicationName: csye6225-webapp
       ComputePlatform: Server
 
-  # CodeDeployDeploymentGroup:
-  #   DependsOn: EC2Instance
-  #   Type: AWS::CodeDeploy::DeploymentGroup
-  #   Properties:
-  #     ApplicationName: !Ref CodeDeployApplication
-  #     # AutoRollbackConfiguration:
-  #     #   Enabled: true
-  #     #   Events:
-  #     #     - DEPLOYMENT_FAILURE
-  #     Deployment:
-  #       Description: Deploy on EC2 Instances
-  #       IgnoreApplicationStopFailures: false
-  #       Revision:
-  #         RevisionType: S3
-  #         S3Location:
-  #           Bucket: !Ref CodeDeployS3Bucket
-  #           Key: csye6225-webapp-*
-  #           BundleType: zip
-  #     DeploymentGroupName: csye6225-webapp-deployment
-  #     DeploymentConfigName: CodeDeployDefault.AllAtOnce
-  #     DeploymentStyle:
-  #       DeploymentOption: WITHOUT_TRAFFIC_CONTROL
-  #       DeploymentType: IN_PLACE
-  #     Ec2TagFilters: 
-  #       - Key: Label
-  #         Value: codedeploy
-  #         Type: KEY_AND_VALUE
-  #     OnPremisesInstanceTagFilters:
-  #       - Key: Label
-  #         Value: codedeploy
-  #         Type: KEY_AND_VALUE
-  #     ServiceRoleArn: !GetAtt [CodeDeployServiceRole, Arn]
+  CodeDeployDeploymentGroup:
+    DependsOn: EC2Instance
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployApplication
+      # AutoRollbackConfiguration:
+      #   Enabled: true
+      #   Events:
+      #     - DEPLOYMENT_FAILURE
+      Deployment:
+        Description: Deploy on EC2 Instances
+        IgnoreApplicationStopFailures: false
+        Revision:
+          RevisionType: S3
+          S3Location:
+            Bucket: !Ref CodeDeployS3Bucket
+            Key: csye6225-webapp-*.zip
+            BundleType: zip
+      DeploymentGroupName: csye6225-webapp-deployment
+      DeploymentConfigName: CodeDeployDefault.AllAtOnce
+      DeploymentStyle:
+        DeploymentOption: WITHOUT_TRAFFIC_CONTROL
+        DeploymentType: IN_PLACE
+      Ec2TagFilters: 
+        - Key: Label
+          Value: codedeploy
+          Type: KEY_AND_VALUE
+      OnPremisesInstanceTagFilters:
+        - Key: Label
+          Value: codedeploy
+          Type: KEY_AND_VALUE
+      ServiceRoleArn: !GetAtt [CodeDeployServiceRole, Arn]
 
   EC2InstanceProfile: 
     Type: AWS::IAM::InstanceProfile
