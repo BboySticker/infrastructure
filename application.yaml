@@ -26,6 +26,10 @@ Parameters:
   EC2InstanceVolumeSize:
     Description: Please enter the instance volume size for the EC2 instance that you want to create
     Type: String
+
+  EC2InstanceKey:
+    Description: Please enter the key name for the EC2 instance that you want to create
+    Type: String
   
   DBInstanceType:
     Description: Please enter the instance type for the database instance that you want to create
@@ -385,7 +389,7 @@ Resources:
             VolumeType: gp2
             VolumeSize: !Ref EC2InstanceVolumeSize
             DeleteOnTermination: true
-      KeyName: KeyForSpringBoot
+      KeyName: !Ref EC2InstanceKey
       SubnetId: !Ref DBSubnet1
       UserData: 
         Fn::Base64: 
