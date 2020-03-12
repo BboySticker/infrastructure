@@ -408,13 +408,13 @@ Resources:
               "echo AWS_S3_BUCKET_NAME=",!Ref EncryptedS3Bucket," >> /env/properties \n",
               "echo AWS_S3_BUCKET_URL=",!GetAtt EncryptedS3Bucket.WebsiteURL," >> /env/properties \n",
               "echo AWS_S3_BUCKET_DOMAIN=",!GetAtt EncryptedS3Bucket.DomainName," >> /env/properties \n",
-              "echo JAVA_OPTS=\'-Dspring.profiles.active=prod -Dapp.profile.name=AWS",
+              "echo JAVA_OPTS=","\\\"","-Dspring.profiles.active=prod -Dapp.profile.name=AWS",
               " -Dspring.datasource.url=jdbc:mysql://",!GetAtt DBInstance.Endpoint.Address,":",!GetAtt DBInstance.Endpoint.Port,"/",!Ref DBName,
               " -Dspring.datasource.username=",!Ref DBUsername," -Dspring.datasource.password=",!Ref DBPassword,
               " -Daws.region=",!Ref Region," -Daws.s3.bucket.name=",!Ref EncryptedS3Bucket,
               " -Daws.s3.bucket.url=",!GetAtt EncryptedS3Bucket.WebsiteURL," -Daws.s3.bucket.domain=",!GetAtt EncryptedS3Bucket.DomainName,
               " -Djdbc.url=jdbc:mysql://",!GetAtt DBInstance.Endpoint.Address,":",!GetAtt DBInstance.Endpoint.Port,"/",!Ref DBName,
-              " -Djdbc.user=",!Ref DBUsername," -Djdbc.password=",!Ref DBPassword," \' >> /env/properties \n",
+              " -Djdbc.user=",!Ref DBUsername," -Djdbc.password=",!Ref DBPassword,"\\\""," >> /env/properties \n",
               "echo export $(grep -v '^#' /env/properties | xargs) >> /etc/profile \n",
               "sudo service tomcat8 restart \n"
             ]
