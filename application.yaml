@@ -254,6 +254,9 @@ Resources:
                 - ec2.amazonaws.com
             Action:
               - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       Tags:
         - Key: Name
           Value: CodeDeployEC2ServiceRole
@@ -412,7 +415,7 @@ Resources:
               "echo AWS_S3_BUCKET_NAME=",!Ref EncryptedS3Bucket," >> /env/properties \n",
               "echo AWS_S3_BUCKET_URL=",!GetAtt EncryptedS3Bucket.WebsiteURL," >> /env/properties \n",
               "echo AWS_S3_BUCKET_DOMAIN=",!GetAtt EncryptedS3Bucket.DomainName," >> /env/properties \n",
-              "echo JAVA_OPTS=","\\\"","-Dspring.profiles.active=prod -Dapp.profile.name=AWS",
+              "echo JAVA_OPTS=","\\\"","-Dspring.profiles.active=prod -Dlogging.level.org.springframework=info -Dapp.profile.name=AWS",
               " -Dspring.datasource.url=jdbc:mysql://",!GetAtt DBInstance.Endpoint.Address,":",!GetAtt DBInstance.Endpoint.Port,"/",!Ref DBName,
               " -Dspring.datasource.username=",!Ref DBUsername," -Dspring.datasource.password=",!Ref DBPassword,
               " -Daws.region=",!Ref Region," -Daws.s3.bucket.name=",!Ref EncryptedS3Bucket,
