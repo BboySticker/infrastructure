@@ -80,6 +80,16 @@ Parameters:
     Description: Please enter the S3 Bucket Name that you want to use for store Application Archive
     Type: String
     Default: arn:aws:s3:::codedeploy.xinyuzhang.me
+  
+  # Certificate:
+  #   Description: Please enter the ARN of the certificate that you want to use
+  #   Type: String
+  #   Default: 
+  
+  Domain:
+    Description: Please enter the Domain that you want to use
+    Type: String
+    Default: xinyuzhang.me
 
 Resources:
   CodeDeployEC2S3:
@@ -272,7 +282,7 @@ Resources:
             Principal:
               Service:
                 - codedeploy.amazonaws.com
-                # - application-autoscaling.amazonaws.com
+                - application-autoscaling.amazonaws.com
             Action:
               - sts:AssumeRole
       ManagedPolicyArns:
@@ -288,10 +298,12 @@ Resources:
       ComputePlatform: Server
 
   CodeDeployDeploymentGroup:
-    DependsOn: EC2Instance
+    # DependsOn: EC2Instance
     Type: AWS::CodeDeploy::DeploymentGroup
     Properties:
       ApplicationName: !Ref CodeDeployApplication
+      AutoScalingGroups: 
+        - !Ref WebServerAutoScalingGroup
       # Deployment:
       #   Description: Deploy on EC2 Instances
       #   IgnoreApplicationStopFailures: false
@@ -301,11 +313,11 @@ Resources:
       #       Bucket: !Ref CodeDeployS3Bucket
       #       Key: csye6225-webapp-*.zip
       #       BundleType: zip
-      DeploymentConfigName: CodeDeployDefault.AllAtOnce
+      # DeploymentConfigName: CodeDeployDefault.AllAtOnce
       DeploymentGroupName: csye6225-webapp-deployment
-      DeploymentStyle:
-        DeploymentOption: WITHOUT_TRAFFIC_CONTROL
-        DeploymentType: IN_PLACE
+      # DeploymentStyle:
+      #   DeploymentOption: WITHOUT_TRAFFIC_CONTROL
+      #   DeploymentType: IN_PLACE
       Ec2TagFilters: 
         - Key: Label
           Value: codedeploy
@@ -319,32 +331,76 @@ Resources:
       Roles: 
         - !Ref CodeDeployEC2ServiceRole
 
-  AppServersSecurityGroup:
+  LoadBalancerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Enable HTTP access via port 22/80/433/8080
+      GroupDescription: Security group for load balancer
       VpcId: !Ref VPC
       SecurityGroupIngress:
-        - IpProtocol: tcp
-          CidrIp: 0.0.0.0/0
-          FromPort: 22
-          ToPort: 22
         - IpProtocol: tcp
           CidrIp: 0.0.0.0/0
           FromPort: 80
           ToPort: 80  
         - IpProtocol: tcp
           CidrIp: 0.0.0.0/0
-          FromPort: 433
-          ToPort: 433
+          FromPort: 443
+          ToPort: 443
+      Tags:
+        - Key: Name
+          Value: loadbalancer
+
+  AppServersSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access via port 22
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
         - IpProtocol: tcp
           CidrIp: 0.0.0.0/0
-          FromPort: 8080
-          ToPort: 8080
+          FromPort: 22
+          ToPort: 22
+        # - IpProtocol: tcp
+        #   CidrIp: 0.0.0.0/0
+        #   FromPort: 80
+        #   ToPort: 80  
+        # - IpProtocol: tcp
+        #   CidrIp: 0.0.0.0/0
+        #   FromPort: 443
+        #   ToPort: 443
+        # - IpProtocol: tcp
+        #   CidrIp: 0.0.0.0/0
+        #   FromPort: 8080
+        #   ToPort: 8080
       Tags:
         - Key: Name
           Value: application
- 
+
+  OutboundRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: 
+      # CidrIp: String
+      # CidrIpv6: String
+      Description: Permits Load Balancer to send traffics to App Server
+      # DestinationPrefixListId: String
+      DestinationSecurityGroupId: !GetAtt [AppServersSecurityGroup, GroupId]
+      FromPort: 8080
+      GroupId: !GetAtt [LoadBalancerSecurityGroup, GroupId]
+      IpProtocol: tcp
+      ToPort: 8080
+
+  InboundRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      # CidrIp: String
+      # CidrIpv6: String
+      Description: Permits App Servers to accpet traffics from Load Balancer
+      # DestinationPrefixListId: String
+      SourceSecurityGroupId: !GetAtt [LoadBalancerSecurityGroup, GroupId]
+      FromPort: 8080
+      GroupId: !GetAtt [AppServersSecurityGroup, GroupId]
+      IpProtocol: tcp
+      ToPort: 8080
+
   DBServersSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -377,23 +433,25 @@ Resources:
             - TransitionInDays: 30
               StorageClass: STANDARD_IA
 
-  EC2Instance:
-    Type: AWS::EC2::Instance
+  AutoScalingConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
     DependsOn: DBInstance
     Properties:
-      ImageId: !Ref AMIID
-      InstanceType: !Ref EC2InstanceType
-      IamInstanceProfile: !Ref EC2InstanceProfile
-      SecurityGroupIds: 
-        - !Ref AppServersSecurityGroup
+      AssociatePublicIpAddress: true
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs: 
             VolumeType: gp2
             VolumeSize: !Ref EC2InstanceVolumeSize
             DeleteOnTermination: true
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      ImageId: !Ref AMIID
+      InstanceType: !Ref EC2InstanceType
       KeyName: !Ref EC2InstanceKey
-      SubnetId: !Ref DBSubnet1
+      LaunchConfigurationName: asg_launch_config
+      SecurityGroups: 
+        - !Ref AppServersSecurityGroup
+      # SubnetId: !Ref DBSubnet1
       UserData: 
         Fn::Base64: 
           Fn::Join: [
@@ -426,10 +484,234 @@ Resources:
               "sudo service tomcat8 restart \n"
             ]
           ]
+      # Tags:
+      #   - Key: Label
+      #     Value: codedeploy
+
+  WebServerAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: LoadBalancer
+    Properties: 
+      AutoScalingGroupName: WebServerAutoScalingGroup
+      AvailabilityZones: 
+        - !GetAtt [DBSubnet1, AvailabilityZone]
+        - !GetAtt [DBSubnet2, AvailabilityZone]
+      Cooldown: "60"
+      DesiredCapacity: "2"
+      # HealthCheckGracePeriod: Integer
+      # HealthCheckType: String
+      # InstanceId: String
+      LaunchConfigurationName: !Ref AutoScalingConfig
+      # LaunchTemplate: 
+      #   LaunchTemplateSpecification
+      # LifecycleHookSpecificationList: 
+      #   - LifecycleHookSpecification
+      # LoadBalancerNames: 
+      #   - !Ref TargetGroup
+      MaxSize: "5"
+      # MetricsCollection: 
+      #   - MetricsCollection
+      MinSize: "2"
+      # MixedInstancesPolicy: 
+      #   MixedInstancesPolicy
+      # NotificationConfigurations: 
+      #   - NotificationConfiguration
+      # PlacementGroup: String
+      # ServiceLinkedRoleARN: String
+      Tags: 
+        - Key: Label
+          Value: codedeploy
+          PropagateAtLaunch: true
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      # TerminationPolicies: 
+      #   - String
+      VPCZoneIdentifier: 
+        - !Ref DBSubnet1
+        - !Ref DBSubnet2
+
+  WebServerScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties: 
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebServerAutoScalingGroup
+      Cooldown: "60"
+      # EstimatedInstanceWarmup: Integer
+      # MetricAggregationType: String
+      # MinAdjustmentMagnitude: Integer
+      # PolicyType: String
+      ScalingAdjustment: "1"
+      # StepAdjustments: 
+      #   - StepAdjustment
+      # TargetTrackingConfiguration: 
+      #   TargetTrackingConfiguration
+
+  WebServerScaleDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties: 
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebServerAutoScalingGroup
+      Cooldown: "60"
+      # EstimatedInstanceWarmup: Integer
+      # MetricAggregationType: String
+      # MinAdjustmentMagnitude: Integer
+      # PolicyType: String
+      ScalingAdjustment: "-1"
+      # StepAdjustments: 
+      #   - StepAdjustment
+      # TargetTrackingConfiguration: 
+      #   TargetTrackingConfiguration
+
+  CPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties: 
+      # ActionsEnabled: Boolean
+      AlarmActions: 
+        - !Ref WebServerScaleUpPolicy
+      AlarmDescription: Scale-up if CPU > 90% for 10 minutes
+      # AlarmName: String
+      ComparisonOperator: GreaterThanThreshold
+      # DatapointsToAlarm: Integer
+      Dimensions: 
+        - Name: AutoScalingGroupName
+          Value: !Ref WebServerAutoScalingGroup
+      # EvaluateLowSampleCountPercentile: String
+      EvaluationPeriods: 2
+      # ExtendedStatistic: String
+      # InsufficientDataActions: 
+      #   - String
+      MetricName: CPUUtilization
+      # Metrics: 
+      #   - MetricDataQuery
+      Namespace: AWS/EC2
+      # OKActions: 
+      #   - String
+      Period: 300
+      Statistic: Average
+      Threshold: 90.0
+      # ThresholdMetricId: String
+      # TreatMissingData: String
+      # Unit: String
+
+  CPUAlarmLow:
+    Type: AWS::CloudWatch::Alarm
+    Properties: 
+      # ActionsEnabled: Boolean
+      AlarmActions: 
+        - !Ref WebServerScaleDownPolicy
+      AlarmDescription: Scale-down if CPU < 8% for 10 minutes
+      # AlarmName: String
+      ComparisonOperator: LessThanThreshold
+      # DatapointsToAlarm: Integer
+      Dimensions: 
+        - Name: AutoScalingGroupName
+          Value: !Ref WebServerAutoScalingGroup
+      # EvaluateLowSampleCountPercentile: String
+      EvaluationPeriods: 2
+      # ExtendedStatistic: String
+      # InsufficientDataActions: 
+      #   - String
+      MetricName: CPUUtilization
+      # Metrics: 
+      #   - MetricDataQuery
+      Namespace: AWS/EC2
+      # OKActions: 
+      #   - String
+      Period: 300
+      Statistic: Average
+      Threshold: 70.0
+      # ThresholdMetricId: String
+      # TreatMissingData: String
+      # Unit: String
+      
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties: 
+      IpAddressType: ipv4
+      # LoadBalancerAttributes: 
+      #   - LoadBalancerAttribute
+      Name: csye6225-webapp-load-balancer-1
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup
+      # SubnetMappings: 
+      #   - SubnetMapping
+      Subnets:
+        - !Ref DBSubnet1
+        - !Ref DBSubnet2
       Tags:
         - Key: Label
           Value: codedeploy
-              
+      Type: application
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties: 
+      # Certificates: 
+      #   - !Ref Certificate
+      DefaultActions: 
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward      
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      HealthCheckIntervalSeconds: 30
+      # HealthCheckPath: String
+      HealthCheckPort: "8080"
+      HealthCheckProtocol: "HTTP"
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Matcher: 
+        HttpCode: "401,200"
+      Name: LoadBalancerTargetGroup
+      Port: 8080
+      Protocol: HTTP
+      Tags:
+        - Key: Label
+          Value: codedeploy
+      TargetGroupAttributes: 
+        - Key: deregistration_delay.timeout_seconds
+          Value: "600"
+        - Key: stickiness.enabled
+          Value: true
+        - Key: stickiness.type
+          Value: lb_cookie
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: "600"
+      # Targets: 
+      #   - TargetDescription
+      # TargetType: String
+      # UnhealthyThresholdCount: Integer
+      VpcId: !Ref VPC
+
+  Route53RecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties: 
+      AliasTarget: 
+        DNSName: !GetAtt [LoadBalancer, DNSName]
+        EvaluateTargetHealth: true
+        HostedZoneId: !GetAtt [LoadBalancer, CanonicalHostedZoneID]
+      Comment: DNS name for my instances.
+      # Failover: String
+      # GeoLocation: 
+      #   GeoLocation
+      # HealthCheckId: String
+      # HostedZoneId: String
+      HostedZoneName: !Join ["", [!Ref Domain, "."]]
+      # MultiValueAnswer: Boolean
+      Name: !Join ["", [!Ref Domain, "."]]
+      # Region: String
+      # ResourceRecords: 
+      #   - String
+      # SetIdentifier: String
+      # TTL: String
+      Type: A
+      # Weight: Integer
+
   DBInstance:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete
@@ -555,16 +837,3 @@ Resources:
     Properties:
       RouteTableId: !Ref DBPublicRouteTable2
       SubnetId: !Ref DBSubnet2
-
-Outputs:
-  VPC:
-    Description: A reference to the created VPC
-    Value: !Ref VPC
-
-  DBSubnet1:
-    Description: A reference to the public subnet in the 1st Availability Zone
-    Value: !Ref DBSubnet1
-  
-  DBSubnet2:
-    Description: A reference to the public subnet in the 1st Availability Zone
-    Value: !Ref DBSubnet2
