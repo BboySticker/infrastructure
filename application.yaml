@@ -480,7 +480,7 @@ Resources:
       AvailabilityZones: 
         - !GetAtt [DBSubnet1, AvailabilityZone]
         - !GetAtt [DBSubnet2, AvailabilityZone]
-      Cooldown: "60"
+      Cooldown: "600"
       DesiredCapacity: "2"
       LaunchConfigurationName: !Ref AutoScalingConfig
       MaxSize: "5"
@@ -500,7 +500,7 @@ Resources:
     Properties: 
       AdjustmentType: ChangeInCapacity
       AutoScalingGroupName: !Ref WebServerAutoScalingGroup
-      Cooldown: "60"
+      Cooldown: "300"
       ScalingAdjustment: "1"
 
   WebServerScaleDownPolicy:
@@ -508,7 +508,7 @@ Resources:
     Properties: 
       AdjustmentType: ChangeInCapacity
       AutoScalingGroupName: !Ref WebServerAutoScalingGroup
-      Cooldown: "60"
+      Cooldown: "300"
       ScalingAdjustment: "-1"
 
   CPUAlarmHigh:
@@ -516,34 +516,34 @@ Resources:
     Properties: 
       AlarmActions: 
         - !Ref WebServerScaleUpPolicy
-      AlarmDescription: Scale-up if CPU > 90% for 10 minutes
+      AlarmDescription: Scale-up if CPU > 10% for 1 minutes
       ComparisonOperator: GreaterThanThreshold
       Dimensions: 
         - Name: AutoScalingGroupName
           Value: !Ref WebServerAutoScalingGroup
-      EvaluationPeriods: 2
+      EvaluationPeriods: 1
       MetricName: CPUUtilization
       Namespace: AWS/EC2
-      Period: 300
+      Period: 60
       Statistic: Average
-      Threshold: 90.0
+      Threshold: 10.0
 
   CPUAlarmLow:
     Type: AWS::CloudWatch::Alarm
     Properties: 
       AlarmActions: 
         - !Ref WebServerScaleDownPolicy
-      AlarmDescription: Scale-down if CPU < 8% for 10 minutes
+      AlarmDescription: Scale-down if CPU < 5% for 1 minutes
       ComparisonOperator: LessThanThreshold
       Dimensions: 
         - Name: AutoScalingGroupName
           Value: !Ref WebServerAutoScalingGroup
-      EvaluationPeriods: 2
+      EvaluationPeriods: 1
       MetricName: CPUUtilization
       Namespace: AWS/EC2
-      Period: 300
+      Period: 60
       Statistic: Average
-      Threshold: 70.0
+      Threshold: 5.0
       
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
