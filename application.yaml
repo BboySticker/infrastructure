@@ -79,7 +79,7 @@ Parameters:
   CodeDeployS3Bucket:
     Description: Please enter the S3 Bucket Name that you want to use for store Application Archive
     Type: String
-    Default: arn:aws:s3:::codedeploy.xinyuzhang.me
+    Default: codedeploy.xinyuzhang.me
   
   Domain:
     Description: Please enter the Domain that you want to use
@@ -87,117 +87,292 @@ Parameters:
     Default: xinyuzhang.me
 
 Resources:
+  LambdaDynamoSESS3SNSPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: Lambda-DynamoDB-SES-S3-SNS-Policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: 
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+            Resource: !GetAtt DynamoDBEmailTable.Arn
+          - Effect: Allow
+            Action: 
+              - ses:VerifyEmailAddress
+              - ses:SendEmail
+              - ses:SendRawEmail
+            Resource: !Sub arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/*
+          - Effect: Allow
+            Action: 
+              - s3:GetObject
+            Resource: [!Join ["", ["arn:aws:s3:::", !Ref CodeDeployS3Bucket]], !Join ["", ["arn:aws:s3:::", !Ref CodeDeployS3Bucket, "/*"]]]
+          - Effect: Allow
+            Action: 
+              - sns:ConfirmSubscription
+            Resource: !Ref SNSTopic
+      Roles: 
+        - !Ref LambdaServiceRole
+
+  LambdaServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: LambdaServiceRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Tags:
+        - Key: Name
+          Value: LambdaServiceRole
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Code: 
+        # S3Bucket: !Ref CodeDeployS3Bucket
+        # S3Key: build.zip
+        ZipFile: |
+          def handler(event, context):
+            print("Hello World")
+      # Environment: 
+      #   Variables: 
+      #     domain: !Ref Domain
+      #     table: !Ref DynamoDBEmailTable
+      FunctionName: email_service
+      Handler: index.handler
+      MemorySize: 256
+      ReservedConcurrentExecutions: 5
+      Role: !GetAtt LambdaServiceRole.Arn
+      Runtime: python3.6
+      Tags: 
+        - Key: Name
+          Value: SendEmailFunction
+      Timeout: 60
+  
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties: 
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LambdaFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref SNSTopic
+
+  DynamoDBEmailTable:
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      AttributeDefinitions: 
+        - AttributeName: "emailId"
+          AttributeType: "S"
+        - AttributeName: "expirationTime"
+          AttributeType: "N"
+      KeySchema:
+        - AttributeName: emailId
+          KeyType: HASH
+        - AttributeName: expirationTime
+          KeyType: RANGE
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName: csye6225
+      TimeToLiveSpecification: 
+        AttributeName: expirationTime
+        Enabled: true
+
+  SQSQueue:
+    Type: AWS::SQS::Queue
+    Properties: 
+      # ContentBasedDeduplication: Boolean
+      DelaySeconds: 5
+      # FifoQueue: Boolean
+      KmsDataKeyReusePeriodSeconds: 43200
+      # KmsMasterKeyId: String
+      # MaximumMessageSize: Integer
+      MessageRetentionPeriod: 86400
+      QueueName: MySQSQueue
+      ReceiveMessageWaitTimeSeconds: 5
+      # RedrivePolicy: Json
+      # Tags: 
+      #   - Tag
+      VisibilityTimeout: 60
+
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties: 
+      DisplayName: MySNSTopic
+      Subscription: 
+        - Endpoint: !GetAtt [LambdaFunction, Arn]
+          Protocol: lambda
+      TopicName: SendEmailOfBillsDue
+
+  # Policies and Roles
+  SQSAccess:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: SQSAccess
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: 
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+            Resource: !GetAtt SQSQueue.Arn
+      Roles: 
+        - !Ref CodeDeployEC2ServiceRole
+  
+  SNSAccess:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: SNSAccess
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: 
+              - sns:Publish
+              - sns:CreateTopic
+            Resource: !Ref SNSTopic
+      Roles: 
+        - !Ref CodeDeployEC2ServiceRole
+
+  CircleCIUploadLambdaFunction:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: CircleCI-Upload-Lambda-Function
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: 
+              - lambda:UpdateFunctionCode
+            Resource: [!GetAtt LambdaFunction.Arn, !Join ["", [!GetAtt LambdaFunction.Arn, "/*"]]]
+      Users:
+        - circleci
+  
   CodeDeployEC2S3:
     Type: AWS::IAM::Policy
     Properties:
-        PolicyName: CodeDeploy-EC2-S3
-        PolicyDocument:
-          Version: 2012-10-17
-          Statement:
-            - Effect: Allow
-              Action: 
-                - s3:GetObject
-                - s3:PutObject
-                - s3:DeleteObject
-                - s3:ListBucket
-              Resource: [!Sub "arn:aws:s3:::${EncryptedS3Bucket}", !Sub "arn:aws:s3:::${EncryptedS3Bucket}/*"]
-            - Effect: Allow
-              Action: 
-                - s3:GetObject
-                - s3:ListBucket
-              Resource: [!Ref CodeDeployS3Bucket, !Join ["", [!Ref CodeDeployS3Bucket, "/*"]]]
-            - Effect: Allow
-              Action: 
-                - s3:GetObject
-                - s3:ListBucket
-              Resource: "*"
-            - Effect: Allow
-              Action: 
-                - kms:*
-              Resource: "*"
-        Roles: 
-          - !Ref CodeDeployEC2ServiceRole
+      PolicyName: CodeDeploy-EC2-S3
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: 
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListBucket
+            Resource: [!Sub "arn:aws:s3:::${EncryptedS3Bucket}", !Sub "arn:aws:s3:::${EncryptedS3Bucket}/*"]
+          - Effect: Allow
+            Action: 
+              - s3:GetObject
+              - s3:ListBucket
+            Resource: [!Join ["", ["arn:aws:s3:::", !Ref CodeDeployS3Bucket]], !Join ["", ["arn:aws:s3:::", !Ref CodeDeployS3Bucket, "/*"]]]
+          - Effect: Allow
+            Action: 
+              - s3:GetObject
+              - s3:ListBucket
+            Resource: "*"
+          - Effect: Allow
+            Action: 
+              - kms:*
+            Resource: "*"
+      Roles: 
+        - !Ref CodeDeployEC2ServiceRole
 
   CircleCIUploadToS3:
     Type: AWS::IAM::Policy
     Properties:
-        PolicyName: CircleCI-Upload-To-S3
-        PolicyDocument:
-          Version: 2012-10-17
-          Statement:
-            - Effect: Allow
-              Action: 
-                - s3:GetObject
-                - s3:PutObject
-                - s3:ListBucket
-              Resource: [!Ref CodeDeployS3Bucket, !Join ["", [!Ref CodeDeployS3Bucket, "/*"]]]
-        Users: 
-          - circleci
+      PolicyName: CircleCI-Upload-To-S3
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: 
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+            Resource: [!Join ["", ["arn:aws:s3:::", !Ref CodeDeployS3Bucket]], !Join ["", ["arn:aws:s3:::", !Ref CodeDeployS3Bucket, "/*"]]]
+      Users: 
+        - circleci
   
   CircleCICodeDeploy:
     Type: AWS::IAM::Policy
     Properties:
-        PolicyName: CircleCI-Code-Deploy
-        PolicyDocument:
-          Version: 2012-10-17
-          Statement:
-            - Effect: Allow
-              Action: 
-                - codedeploy:RegisterApplicationRevision
-                - codedeploy:GetApplicationRevision
-              Resource: 
-                - Fn::Join: [
-                    "",
-                    [
-                      "arn:aws:codedeploy:",
-                      !Ref "AWS::Region",
-                      ":",
-                      !Ref "AWS::AccountId",
-                      ":application:",
-                      !Ref CodeDeployApplication
-                    ]
+      PolicyName: CircleCI-Code-Deploy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: 
+              - codedeploy:RegisterApplicationRevision
+              - codedeploy:GetApplicationRevision
+            Resource: 
+              - Fn::Join: [
+                  "",
+                  [
+                    "arn:aws:codedeploy:",
+                    !Ref "AWS::Region",
+                    ":",
+                    !Ref "AWS::AccountId",
+                    ":application:",
+                    !Ref CodeDeployApplication
                   ]
-            - Effect: Allow
-              Action: 
-                - codedeploy:CreateDeployment
-                - codedeploy:GetDeployment
-              Resource: "*"
-            - Effect: Allow
-              Action: 
-                - codedeploy:GetDeploymentConfig
-              Resource: 
-                - Fn::Join: [
-                    "", 
-                    [
-                      "arn:aws:codedeploy:", 
-                      !Ref "AWS::Region", 
-                      ":",
-                      !Ref "AWS::AccountId",
-                      ":deploymentconfig:CodeDeployDefault.OneAtATime"
-                    ]
+                ]
+          - Effect: Allow
+            Action: 
+              - codedeploy:CreateDeployment
+              - codedeploy:GetDeployment
+            Resource: "*"
+          - Effect: Allow
+            Action: 
+              - codedeploy:GetDeploymentConfig
+            Resource: 
+              - Fn::Join: [
+                  "", 
+                  [
+                    "arn:aws:codedeploy:", 
+                    !Ref "AWS::Region", 
+                    ":",
+                    !Ref "AWS::AccountId",
+                    ":deploymentconfig:CodeDeployDefault.OneAtATime"
                   ]
-                - Fn::Join: [
-                    "",
-                    [
-                      "arn:aws:codedeploy:",
-                      !Ref "AWS::Region",
-                      ":",
-                      !Ref "AWS::AccountId",
-                      ":deploymentconfig:CodeDeployDefault.HalfAtATime"
-                    ]
+                ]
+              - Fn::Join: [
+                  "",
+                  [
+                    "arn:aws:codedeploy:",
+                    !Ref "AWS::Region",
+                    ":",
+                    !Ref "AWS::AccountId",
+                    ":deploymentconfig:CodeDeployDefault.HalfAtATime"
                   ]
-                - Fn::Join: [
-                    "",
-                    [
-                      "arn:aws:codedeploy:",
-                      !Ref "AWS::Region",
-                      ":",
-                      !Ref "AWS::AccountId",
-                      ":deploymentconfig:CodeDeployDefault.AllAtOnce"
-                    ]
+                ]
+              - Fn::Join: [
+                  "",
+                  [
+                    "arn:aws:codedeploy:",
+                    !Ref "AWS::Region",
+                    ":",
+                    !Ref "AWS::AccountId",
+                    ":deploymentconfig:CodeDeployDefault.AllAtOnce"
                   ]
-        Users: 
-          - circleci
+                ]
+      Users: 
+        - circleci
 
   CircleciEC2AMI:
     Type: AWS::IAM::Policy
@@ -286,6 +461,7 @@ Resources:
         - Key: Name
           Value: CodeDeployServiceRole
 
+  # CodeDeploy (CD)
   CodeDeployApplication:
     Type: AWS::CodeDeploy::Application
     Properties: 
@@ -325,6 +501,7 @@ Resources:
       Roles: 
         - !Ref CodeDeployEC2ServiceRole
 
+  # Security Groups
   LoadBalancerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -353,18 +530,6 @@ Resources:
           CidrIp: 0.0.0.0/0
           FromPort: 22
           ToPort: 22
-        # - IpProtocol: tcp
-        #   CidrIp: 0.0.0.0/0
-        #   FromPort: 80
-        #   ToPort: 80  
-        # - IpProtocol: tcp
-        #   CidrIp: 0.0.0.0/0
-        #   FromPort: 443
-        #   ToPort: 443
-        # - IpProtocol: tcp
-        #   CidrIp: 0.0.0.0/0
-        #   FromPort: 8080
-        #   ToPort: 8080
       Tags:
         - Key: Name
           Value: application
@@ -421,6 +586,7 @@ Resources:
             - TransitionInDays: 30
               StorageClass: STANDARD_IA
 
+  # Auto-Scaling Group (Config, LoadBalancer, TargetGroup, DNS...)
   AutoScalingConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
     DependsOn: DBInstance
@@ -460,14 +626,18 @@ Resources:
               "echo AWS_S3_BUCKET_NAME=",!Ref EncryptedS3Bucket," >> /env/properties \n",
               "echo AWS_S3_BUCKET_URL=",!GetAtt EncryptedS3Bucket.WebsiteURL," >> /env/properties \n",
               "echo AWS_S3_BUCKET_DOMAIN=",!GetAtt EncryptedS3Bucket.DomainName," >> /env/properties \n",
+              "echo SQS_URL=",!Ref SQSQueue," >> /env/properties \n",
+              "echo SNS_ARN=",!Ref SNSTopic," >> /env/properties \n",
               "echo JAVA_OPTS=","\\\"","-Dspring.profiles.active=prod -Dlogging.level.org.springframework=info -Dapp.profile.name=AWS",
               " -Dspring.datasource.url=jdbc:mysql://",!GetAtt DBInstance.Endpoint.Address,":",!GetAtt DBInstance.Endpoint.Port,"/",!Ref DBName,
               " -Dspring.datasource.username=",!Ref DBUsername," -Dspring.datasource.password=",!Ref DBPassword,
+              " -Dspring.datasource.hikari.jdbc-url=jdbc:mysql://",!GetAtt DBInstance.Endpoint.Address,":",!GetAtt DBInstance.Endpoint.Port,"/",!Ref DBName,
+              " -Dspring.datasource.hikari.username=",!Ref DBUsername," -Dspring.datasource.hikari.password=",!Ref DBPassword,
               " -Daws.region=",!Ref Region," -Daws.s3.bucket.name=",!Ref EncryptedS3Bucket,
               " -Daws.s3.bucket.url=",!GetAtt EncryptedS3Bucket.WebsiteURL," -Daws.s3.bucket.domain=",!GetAtt EncryptedS3Bucket.DomainName,
-              " -Djdbc.url=jdbc:mysql://",!GetAtt DBInstance.Endpoint.Address,":",!GetAtt DBInstance.Endpoint.Port,"/",!Ref DBName,
-              " -Djdbc.user=",!Ref DBUsername," -Djdbc.password=",!Ref DBPassword,"\\\""," >> /env/properties \n",
-              # "echo export $(grep -v '^#' /env/properties | xargs) >> /etc/profile \n",
+              " -Daws.sqs.url=",!Ref SQSQueue," -Daws.sns.arn=",!Ref SNSTopic,
+              "\\\""," >> /env/properties \n",
+              "echo export $(grep -v '^#' /env/properties | xargs) >> /etc/profile \n",
               "sudo service tomcat8 restart \n"
             ]
           ]
@@ -526,7 +696,7 @@ Resources:
       Namespace: AWS/EC2
       Period: 60
       Statistic: Average
-      Threshold: 10.0
+      Threshold: 50.0
 
   CPUAlarmLow:
     Type: AWS::CloudWatch::Alarm
@@ -543,7 +713,7 @@ Resources:
       Namespace: AWS/EC2
       Period: 60
       Statistic: Average
-      Threshold: 5.0
+      Threshold: 25.0
       
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -610,6 +780,7 @@ Resources:
       Name: !Join ["", [!Ref Domain, "."]]
       Type: A
 
+  # Database Server
   DBInstance:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete
@@ -637,6 +808,7 @@ Resources:
         - !Ref DBSubnet1
         - !Ref DBSubnet2
 
+  # Networking Part (VPC, Subnet, Route...)
   VPC:
     Type: AWS::EC2::VPC
     Properties:
