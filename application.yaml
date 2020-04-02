@@ -173,15 +173,11 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties: 
       AttributeDefinitions: 
-        - AttributeName: "emailId"
-          AttributeType: "S"
-        - AttributeName: "expirationTime"
-          AttributeType: "N"
+        - AttributeName: emailId
+          AttributeType: S
       KeySchema:
         - AttributeName: emailId
           KeyType: HASH
-        - AttributeName: expirationTime
-          KeyType: RANGE
       ProvisionedThroughput: 
         ReadCapacityUnits: 5
         WriteCapacityUnits: 5
@@ -258,6 +254,7 @@ Resources:
           - Effect: Allow
             Action: 
               - lambda:UpdateFunctionCode
+              - lambda:UpdateFunctionConfiguration
             Resource: [!GetAtt LambdaFunction.Arn, !Join ["", [!GetAtt LambdaFunction.Arn, "/*"]]]
       Users:
         - circleci
@@ -628,6 +625,7 @@ Resources:
               "echo AWS_S3_BUCKET_DOMAIN=",!GetAtt EncryptedS3Bucket.DomainName," >> /env/properties \n",
               "echo SQS_URL=",!Ref SQSQueue," >> /env/properties \n",
               "echo SNS_ARN=",!Ref SNSTopic," >> /env/properties \n",
+              "echo SERVER_DOMAIN=",!Ref Domain," >> /env/properties \n",
               "echo JAVA_OPTS=","\\\"","-Dspring.profiles.active=prod -Dlogging.level.org.springframework=info -Dapp.profile.name=AWS",
               " -Dspring.datasource.url=jdbc:mysql://",!GetAtt DBInstance.Endpoint.Address,":",!GetAtt DBInstance.Endpoint.Port,"/",!Ref DBName,
               " -Dspring.datasource.username=",!Ref DBUsername," -Dspring.datasource.password=",!Ref DBPassword,
@@ -635,7 +633,7 @@ Resources:
               " -Dspring.datasource.hikari.username=",!Ref DBUsername," -Dspring.datasource.hikari.password=",!Ref DBPassword,
               " -Daws.region=",!Ref Region," -Daws.s3.bucket.name=",!Ref EncryptedS3Bucket,
               " -Daws.s3.bucket.url=",!GetAtt EncryptedS3Bucket.WebsiteURL," -Daws.s3.bucket.domain=",!GetAtt EncryptedS3Bucket.DomainName,
-              " -Daws.sqs.url=",!Ref SQSQueue," -Daws.sns.arn=",!Ref SNSTopic,
+              " -Daws.sqs.url=",!Ref SQSQueue," -Daws.sns.arn=",!Ref SNSTopic," -Daws.server.domain=",!Ref Domain,
               "\\\""," >> /env/properties \n",
               "echo export $(grep -v '^#' /env/properties | xargs) >> /etc/profile \n",
               "sudo service tomcat8 restart \n"
