@@ -85,6 +85,11 @@ Parameters:
     Description: Please enter the Domain that you want to use
     Type: String
     Default: xinyuzhang.me
+  
+  Certificate:
+    Description: Please enter the Certificate that you want to use
+    Type: String
+    Default: arn:aws:acm:us-east-1:480616773130:certificate/7ee5327f-6165-429a-b75c-9ad9ebd06d58
 
 Resources:
   LambdaDynamoSESS3SNSPolicy:
@@ -141,15 +146,9 @@ Resources:
     Type: AWS::Lambda::Function
     Properties: 
       Code: 
-        # S3Bucket: !Ref CodeDeployS3Bucket
-        # S3Key: build.zip
         ZipFile: |
           def handler(event, context):
             print("Hello World")
-      # Environment: 
-      #   Variables: 
-      #     domain: !Ref Domain
-      #     table: !Ref DynamoDBEmailTable
       FunctionName: email_service
       Handler: index.handler
       MemorySize: 256
@@ -189,18 +188,11 @@ Resources:
   SQSQueue:
     Type: AWS::SQS::Queue
     Properties: 
-      # ContentBasedDeduplication: Boolean
       DelaySeconds: 5
-      # FifoQueue: Boolean
       KmsDataKeyReusePeriodSeconds: 43200
-      # KmsMasterKeyId: String
-      # MaximumMessageSize: Integer
       MessageRetentionPeriod: 86400
       QueueName: MySQSQueue
       ReceiveMessageWaitTimeSeconds: 5
-      # RedrivePolicy: Json
-      # Tags: 
-      #   - Tag
       VisibilityTimeout: 60
 
   SNSTopic:
@@ -507,10 +499,6 @@ Resources:
       SecurityGroupIngress:
         - IpProtocol: tcp
           CidrIp: 0.0.0.0/0
-          FromPort: 80
-          ToPort: 80  
-        - IpProtocol: tcp
-          CidrIp: 0.0.0.0/0
           FromPort: 443
           ToPort: 443
       Tags:
@@ -611,6 +599,9 @@ Resources:
               "set -e -x \n",
               # "sudo apt-get update -y \n",
               # "sudo apt-get upgrade -y \n",
+              "sudo mkdir -p /var/mysql-certs/ \n",
+              "cd /var/mysql-certs/ \n",
+              "sudo curl -O https://s3.amazonaws.com/rds-downloads/rds-combined-ca-bundle.pem \n",
               "sudo mkdir /env \n",
               "sudo touch /env/properties \n",
               "echo PROFILE_NAME=AWS >> /env/properties \n",
@@ -732,12 +723,14 @@ Resources:
   Listener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties: 
+      Certificates:
+        - CertificateArn: !Ref Certificate
       DefaultActions: 
         - TargetGroupArn: !Ref TargetGroup
           Type: forward      
       LoadBalancerArn: !Ref LoadBalancer
-      Port: 80
-      Protocol: HTTP
+      Port: 443
+      Protocol: HTTPS
 
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -784,6 +777,7 @@ Resources:
     DeletionPolicy: Delete
     Properties:
       DBName: !Ref DBName
+      EnablePerformanceInsights: true
       Engine: !Ref DBEngine
       EngineVersion: 8.0.17
       DBInstanceClass: !Ref DBInstanceType
