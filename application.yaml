@@ -510,11 +510,11 @@ Resources:
     Properties:
       GroupDescription: Enable HTTP access via port 22
       VpcId: !Ref VPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          CidrIp: 0.0.0.0/0
-          FromPort: 22
-          ToPort: 22
+      # SecurityGroupIngress:
+      #   - IpProtocol: tcp
+      #     CidrIp: 0.0.0.0/0
+      #     FromPort: 22
+      #     ToPort: 22
       Tags:
         - Key: Name
           Value: application
