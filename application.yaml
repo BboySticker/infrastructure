@@ -790,6 +790,7 @@ Resources:
       PubliclyAccessible: !Ref DBPublicAccessibility
       VPCSecurityGroups: 
         - !Ref DBServersSecurityGroup
+      StorageEncrypted: true
 
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
